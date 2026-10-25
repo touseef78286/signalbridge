@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 1: Global Safety Net - Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email == 'touseefpanjtan52@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    // --- Validation Helper: Incident ---
+    function isValidIncident(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 300 &&
+        data.originType is string && (data.originType == 'live_feed' || data.originType == 'user_report' || data.originType == 'synthetic_demo') &&
+        data.reviewStatus is string && (data.reviewStatus == 'unreviewed' || data.reviewStatus == 'verified' || data.reviewStatus == 'disputed' || data.reviewStatus == 'escalated' || data.reviewStatus == 'dismissed') &&
+        data.conflictStatus is string && (data.conflictStatus == 'none' || data.conflictStatus == 'suspected_conflict' || data.conflictStatus == 'reconciled') &&
+        (!('reviewedBy' in data) || (data.reviewedBy is string && data.reviewedBy.size() <= 150)) &&
+        (!('reviewedAt' in data) || (data.reviewedAt is string && data.reviewedAt.size() <= 50)) &&
+        (!('reviewerNotes' in data) || (data.reviewerNotes is string && data.reviewerNotes.size() <= 4000)) &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    // --- Validation Helper: AuditLog ---
+    function isValidAuditLog(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.timestamp is string && data.timestamp.size() <= 50 &&
+        data.action is string && (
+          data.action == 'incident_ingested' ||
+          data.action == 'analysis_completed' ||
+          data.action == 'review_status_updated' ||
+          data.action == 'incidents_merged' ||
+          data.action == 'candidates_kept_separate' ||
+          data.action == 'candidate_marked_uncertain' ||
+          data.action == 'feed_synced'
+        ) &&
+        data.incidentId is string && data.incidentId.size() <= 128 &&
+        data.actor is string && data.actor.size() <= 150 &&
+        data.provenance is string && data.provenance.size() <= 500;
+    }
+
+    // --- Validation Helper: FeedSyncState ---
+    function isValidFeedSyncState(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.feedId is string && data.feedId.size() <= 64 &&
+        data.feedName is string && data.feedName.size() <= 120 &&
+        data.lastStatus is string && (data.lastStatus == 'ok' || data.lastStatus == 'degraded' || data.lastStatus == 'error') &&
+        (!('errorMessage' in data) || (data.errorMessage is string && data.errorMessage.size() <= 1000));
+    }
+
+    // --- Collection: Incidents ---
+    match /incidents/{incidentId} {
+      allow read: if true;
+
+      allow create: if (isSignedIn() || isAdmin()) &&
+        isValidId(incidentId) &&
+        incoming().id == incidentId &&
+        isValidIncident(incoming());
+
+      allow update: if (
+        isValidId(incidentId) &&
+        isValidIncident(incoming()) &&
+        incoming().id == existing().id &&
+        (
+          isAdmin() ||
+          (
+            isSignedIn() && (
+              // Action: Triage & Verification update
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'reviewStatus', 'reviewedBy', 'reviewedAt', 'reviewerNotes', 'conflictStatus', 'updatedAt'
+              ]) ||
+              // Action: Incident Merge Consolidation
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'mergedReports', 'impact', 'casualties', 'reviewerNotes', 'updatedAt', 'conflictStatus', 'reviewStatus'
+              ])
+            )
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // --- Collection: Audit Logs (Immutable Append-Only) ---
+    match /audit_logs/{logId} {
+      allow read: if true;
+
+      allow create: if (isSignedIn() || isAdmin()) &&
+        isValidId(logId) &&
+        incoming().id == logId &&
+        isValidAuditLog(incoming());
+
+      // Immutable log invariant: No updates or deletes permitted
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // --- Collection: Feed Sync States ---
+    match /feed_sync_states/{feedId} {
+      allow read: if true;
+
+      allow create, update: if (isSignedIn() || isAdmin()) &&
+        isValidId(feedId) &&
+        incoming().id == feedId &&
+        isValidFeedSyncState(incoming());
+
+      allow delete: if isAdmin();
+    }
+  }
+}

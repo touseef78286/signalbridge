@@ -1,0 +1,6 @@
+{
+  "name": "SignalBridge AI",
+  "description": "Evidence-grounded crisis incident triage, reliable LLM analysis, and duplicate resolution system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

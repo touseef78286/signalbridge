@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "Incident": {
+      "title": "Incident",
+      "description": "Normalized crisis incident record with evidence provenance, conflict indicators, and human review status",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Unique identifier of the incident"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Short informative title of the incident"
+        },
+        "originType": {
+          "type": "string",
+          "enum": ["live_feed", "user_report", "synthetic_demo"],
+          "description": "Origin of the incident data"
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": ["unreviewed", "verified", "disputed", "escalated", "dismissed"],
+          "description": "Human verification and operational triage state"
+        },
+        "conflictStatus": {
+          "type": "string",
+          "enum": ["none", "suspected_conflict", "reconciled"],
+          "description": "Status of impact or casualty discrepancies across merged sources"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "maxLength": 150,
+          "description": "Identifier or name of human reviewer"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp when reviewed"
+        },
+        "reviewerNotes": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Notes and rationale provided by reviewer"
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp when created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp when last updated"
+        }
+      },
+      "required": ["id", "title", "originType", "reviewStatus", "conflictStatus", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable operational log entry recording triage, merge, and feed sync events",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Unique log entry identifier"
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp of the audit entry"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "incident_ingested",
+            "analysis_completed",
+            "review_status_updated",
+            "incidents_merged",
+            "candidates_kept_separate",
+            "candidate_marked_uncertain",
+            "feed_synced"
+          ],
+          "description": "Specific action performed"
+        },
+        "incidentId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Associated incident ID"
+        },
+        "actor": {
+          "type": "string",
+          "maxLength": 150,
+          "description": "User or system agent performing the action"
+        },
+        "provenance": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Traceability source or reasoning summary"
+        }
+      },
+      "required": ["id", "timestamp", "action", "incidentId", "actor", "provenance"]
+    },
+    "FeedSyncState": {
+      "title": "FeedSyncState",
+      "description": "Status and health tracking for public disaster feeds",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Unique feed identifier"
+        },
+        "feedId": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Machine-readable feed key (e.g., usgs, gdacs)"
+        },
+        "feedName": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Display name of the data feed"
+        },
+        "lastSuccessfulSync": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp of last successful synchronization"
+        },
+        "lastStatus": {
+          "type": "string",
+          "enum": ["ok", "degraded", "error"],
+          "description": "Current health state of the feed"
+        },
+        "recordCount": {
+          "type": "number",
+          "description": "Number of records ingested during last sync"
+        },
+        "errorMessage": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Error details if feed synchronization failed"
+        }
+      },
+      "required": ["id", "feedId", "feedName", "lastStatus"]
+    }
+  },
+  "firestore": {
+    "/incidents/{incidentId}": {
+      "schema": "Incident",
+      "description": "Persistent collection of normalized crisis incidents"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable operational audit log entries"
+    },
+    "/feed_sync_states/{feedId}": {
+      "schema": "FeedSyncState",
+      "description": "Health and sync telemetry for external disaster adapters"
+    }
+  }
+}
